@@ -2,24 +2,36 @@ local crud = require('crud')
 
 -- OneToMany pattern, the owner can have multiple pets
 local function find_owners_by_last_name(last_name)
-    local owners
+    local join_result, owners, err
     -- return all if the last_name is not specified
     if last_name == nil or last_name == "" then
-        owners = crud.select("owners")
+        owners, err = crud.select("owners")
     else
-        owners = crud.select("owners", {{'=', 'last_name', last_name}})
+        owners, err = crud.select("owners", {{'=', 'last_name', last_name}})
     end
+
+    if err ~= nil then
+        return nil, err
+    end
+
+    join_result = { metadata = owners.metadata, rows = {} }
+
     for _, owner in pairs(owners.rows) do
-        local pets = crud.select("pets", {{'=', 'owner_id', owner[1]}})
+        local pets, err = crud.select("pets", {{'=', 'owner_id', owner[1]}})
+        if err ~= nil then
+            return nil, err
+        end
         pets = crud.unflatten_rows(pets.rows, pets.metadata)
         for _, pet in pairs(pets) do
             -- this is necessary for correct processing of the nested entity pet_type
             -- for this Query we don't need pet_type name
             pet.type_id = { id=pet.type_id }
         end
-        owner[8] = pets
+        local owner_with_pets = owner:totable()
+        owner_with_pets[8] = pets
+        join_result.rows[#join_result.rows+1] = owner_with_pets
     end
-    return owners
+    return join_result
 end
 
 -- OneToMany = Owners -> Pets
